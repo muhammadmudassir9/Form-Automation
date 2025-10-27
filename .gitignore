@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Browser Data (should not be committed)
+browser_data/
+**/browser_data/
+*.localstorage
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Cache and temporary files
+*.cache
+.cache/
+tmp/
+temp/
+
+# Documents folder (user uploads)
+documents/
+**/documents/
+
+# Exclude large binary files
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.doc
+*.docx
+!form_automation/README.md
+
