@@ -100,7 +100,3 @@ python3 form_automation.py
 - Check folder path exists
 - Verify file permissions
 - Ensure supported extensions: `.png`, `.jpg`, `.jpeg`, `.pdf`, `.doc`, `.docx`
-
----
-
-**Created by [Muhammad Mudassar](https://github.com/muhammadmudassir9)**

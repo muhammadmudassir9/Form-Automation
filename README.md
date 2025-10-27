@@ -80,7 +80,3 @@ For detailed instructions, see [form_automation/README.md](form_automation/READM
 ## License
 
 MIT License
-
----
-
-**Created by [Muhammad Mudassar](https://github.com/muhammadmudassir9)**
