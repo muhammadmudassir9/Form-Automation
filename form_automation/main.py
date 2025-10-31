@@ -6,9 +6,11 @@ Production-ready automation with enterprise best practices
 
 import logging
 import os
+import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 from playwright.sync_api import Page, sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 
@@ -57,6 +59,7 @@ class Config:
     TIMEOUT_FORM_LOAD = 60000
     TIMEOUT_ELEMENT = 10000
     TIMEOUT_LOGIN = 300000
+    CAPTCHA_WAIT = 180000  # wait up to 3 minutes if captcha appears
     WAIT_SHORT = 1000
     WAIT_MEDIUM = 2000
     WAIT_LONG = 5000
@@ -68,6 +71,7 @@ class Config:
     
     # Browser settings
     KEEP_BROWSER_OPEN = True
+    NOTIFICATION_TITLE = "Action Required: Solve CAPTCHA"
     
     # Success messages
     SUCCESS_MESSAGES = [
@@ -130,6 +134,29 @@ def take_screenshot(page: Page, name: str) -> None:
         logging.error(f"Screenshot capture failed: {e}")
 
 
+def notify_user(message: str) -> None:
+    """Send a desktop notification if possible and log the message.
+
+    - On Linux, uses `notify-send` when available.
+    - Also writes a marker file under browser_data so external watchers can react.
+    """
+    logger = logging.getLogger(__name__)
+    logger.warning(message)
+    try:
+        # Marker file for external hooks/cron or user checks
+        marker = Config.BROWSER_DATA_DIR / "captcha_alert.txt"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(f"{datetime.now().isoformat()} - {message}\n", encoding="utf-8")
+    except Exception:
+        pass
+
+    try:
+        if shutil.which("notify-send"):
+            subprocess.Popen(["notify-send", Config.NOTIFICATION_TITLE, message])
+    except Exception:
+        # Best-effort; logging already covers visibility
+        pass
+
 def get_files_from_folder() -> List[str]:
     """Get supported files with enterprise error handling"""
     logger = logging.getLogger(__name__)
@@ -189,41 +216,109 @@ def load_form(page: Page) -> bool:
 
 
 def clear_form(page: Page) -> bool:
-    """Clear form with enterprise validation"""
+    """Clear form by clicking the built-in Clear form action and confirming."""
     logger = logging.getLogger(__name__)
     logger.info("Initiating form clear operation")
     
     try:
-        # Navigate to form top
-        page.evaluate("window.scrollTo(0, 0)")
-        page.wait_for_timeout(Config.WAIT_SHORT)
-        
-        # Clear input fields
-        elements = page.locator(Config.SEL_FORM_INPUTS)
-        cleared_count = 0
-        
-        for i in range(elements.count()):
-            try:
-                elements.nth(i).click()
-                elements.nth(i).clear()
-                cleared_count += 1
-            except Exception:
-                continue
-        
-        # Clear uploaded files
-        remove_buttons = page.locator(Config.SEL_REMOVE_FILE)
-        for i in range(remove_buttons.count()):
-            try:
-                remove_buttons.nth(i).click()
-                page.wait_for_timeout(500)
-            except Exception:
-                continue
-        
-        # Navigate to form bottom
+        # Scroll near the bottom where Clear form usually lives
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         page.wait_for_timeout(Config.WAIT_SHORT)
-        
-        logger.info(f"Form clear operation complete: {cleared_count} fields cleared")
+
+        # Candidate selectors for Clear form action
+        clear_selectors = [
+            '[role="button"]:has-text("Clear form")',
+            'button:has-text("Clear form")',
+            'text="Clear form"',
+        ]
+
+        # Attempt to locate and click Clear form
+        clear_clicked = False
+        for sel in clear_selectors:
+            try:
+                loc = page.locator(sel)
+                if loc.count() > 0:
+                    logger.info("Clicking Clear form")
+                    loc.first.click(timeout=Config.TIMEOUT_ELEMENT)
+                    clear_clicked = True
+                    break
+            except Exception:
+                continue
+
+        if not clear_clicked:
+            # Fallback: sometimes the control is above; scroll up and try again
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(Config.WAIT_MEDIUM)
+            for sel in clear_selectors:
+                try:
+                    loc = page.locator(sel)
+                    if loc.count() > 0:
+                        logger.info("Clicking Clear form (fallback)")
+                        loc.first.click(timeout=Config.TIMEOUT_ELEMENT)
+                        clear_clicked = True
+                        break
+                except Exception:
+                    continue
+
+        if not clear_clicked:
+            logger.warning("Clear form control not found; skipping clear step")
+            return True
+
+        # Confirm in dialog
+        confirmed = False
+        try:
+            dialog = page.locator('[role="dialog"], [role="alertdialog"]')
+            # Wait for dialog to appear
+            try:
+                dialog.wait_for(state='visible', timeout=Config.TIMEOUT_ELEMENT)
+            except Exception:
+                page.wait_for_timeout(Config.WAIT_SHORT)
+            if dialog.count() > 0:
+                # Prefer the exact label "Clear form" shown in Google Forms
+                confirm_variants = [
+                    '[role="dialog"] [role="button"]:has-text("Clear form")',
+                    '[role="alertdialog"] [role="button"]:has-text("Clear form")',
+                    '[role="dialog"] button:has-text("Clear form")',
+                    '[role="alertdialog"] button:has-text("Clear form")',
+                    'role=button[name="Clear form"]',
+                    '[role="dialog"] [role="button"]:has-text("Clear")',
+                    '[role="alertdialog"] [role="button"]:has-text("Clear")',
+                    '[role="dialog"] button:has-text("Clear")',
+                    '[role="alertdialog"] button:has-text("Clear")',
+                    '[role="dialog"] [data-mdc-dialog-action="accept"]',
+                    '[role="alertdialog"] [data-mdc-dialog-action="accept"]',
+                ]
+                for variant in confirm_variants:
+                    try:
+                        btn = page.locator(variant)
+                        if btn.count() > 0:
+                            logger.info("Confirming Clear form in dialog")
+                            btn.first.click(timeout=Config.TIMEOUT_ELEMENT)
+                            confirmed = True
+                            break
+                    except Exception:
+                        continue
+                if not confirmed:
+                    # Fallback to pressing Enter to accept
+                    try:
+                        page.keyboard.press('Enter')
+                        confirmed = True
+                    except Exception:
+                        pass
+            # Wait for dialog to disappear so we don't stall
+            try:
+                dialog.wait_for(state='hidden', timeout=Config.TIMEOUT_ELEMENT)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        if not confirmed:
+            logger.info("No confirmation dialog detected; proceeding")
+
+        # Give the form a moment to reset
+        page.wait_for_timeout(Config.WAIT_LONG)
+        logger.info("Form clear operation complete")
         return True
         
     except Exception as e:
@@ -443,6 +538,38 @@ def submit_form(page: Page) -> bool:
             else:
                 logger.warning("Submit button not found")
             
+            # If captcha appears, wait and allow manual solve
+            try:
+                captcha_present = False
+                # quick detection heuristics
+                if page.locator('iframe[title*="captcha" i], iframe[src*="recaptcha" i], div.g-recaptcha').count() > 0:
+                    captcha_present = True
+                else:
+                    for fr in page.frames:
+                        if 'recaptcha' in (fr.url or '').lower():
+                            captcha_present = True
+                            break
+                if captcha_present:
+                    notify_user("Google Forms challenged the automation. Please solve the CAPTCHA in the open browser window.")
+                    try:
+                        page.bring_to_front()
+                    except Exception:
+                        pass
+                    logger.warning("Captcha detected. Waiting for manual completion (up to 3 minutes)...")
+                    waited = 0
+                    step = 2000
+                    while waited < Config.CAPTCHA_WAIT:
+                        page.wait_for_timeout(step)
+                        waited += step
+                        # break early if submission succeeded
+                        if is_form_submitted(page):
+                            break
+                        # or captcha elements disappeared
+                        if page.locator('iframe[title*="captcha" i], iframe[src*="recaptcha" i], div.g-recaptcha').count() == 0:
+                            break
+            except Exception:
+                pass
+
             # Post-submission verification
             for wait_attempt in range(3):
                 page.wait_for_timeout(Config.WAIT_MEDIUM)
