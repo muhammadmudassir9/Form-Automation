@@ -117,35 +117,62 @@ Form-Automation/
 
 ---
 
-## n8n Setup (Optional - For Email Automation)
+## Email Automation with n8n
 
-n8n can monitor Gmail and automatically run the script when emails arrive.
+n8n can monitor your Gmail and automatically run the script when emails with form links arrive.
 
-### Setup Steps
+### Step-by-Step n8n Setup
 
-1. **Install n8n:**
+**Step 1: Install n8n**
+```bash
+npm install n8n -g
+n8n start
+```
+Open http://localhost:5678 in your browser
+
+**Step 2: Enable Gmail API**
+1. Go to https://console.cloud.google.com/
+2. Click "New Project" → Enter name: `Form Automation` → Create
+3. Go to https://console.cloud.google.com/apis/library
+4. Search "Gmail API" → Click it → Click "Enable"
+
+**Step 3: Create OAuth Credentials**
+1. Go to https://console.cloud.google.com/apis/credentials
+2. Click "OAuth consent screen" → Select "External" → Create
+3. Fill app name: `Form Automation`, your email → Save and Continue (3 times)
+4. Go to "Credentials" tab → Click "Create Credentials" → "OAuth client ID"
+5. Select "Web application" → Name: `n8n Gmail API` → Create
+6. **Copy Client ID and Client Secret** (save them)
+
+**Step 4: Add Gmail Credential in n8n**
+1. In n8n (http://localhost:5678), click "Credentials" in sidebar
+2. Click "+ Add Credential" → Search "Gmail OAuth2"
+3. Enter:
+   - Credential Name: `Gmail account`
+   - Client ID: (paste from Step 3)
+   - Client Secret: (paste from Step 3)
+4. Click "Connect my account" → Allow Google permissions
+5. Click "Save"
+
+**Step 5: Import Workflow**
+1. In n8n, click "Workflows" in sidebar
+2. Click "+" → "Import from File"
+3. Select `form_automation/n8n_workflow.json`
+
+**Step 6: Configure Workflow**
+1. Open the imported workflow
+2. Click on each Gmail node → Select "Gmail account" credential
+3. Click "Execute Command" node → Update command:
    ```bash
-   npm install n8n -g
-   n8n start
+   cd /full/path/to/Form-Automation/form_automation && python3 main.py --url="{{ $json.body }}"
    ```
-   Open http://localhost:5678
+   (Replace with your actual path - find it with `which python3` and `pwd`)
+4. Click "Save" → Toggle workflow to "Active"
 
-2. **Enable Gmail API:**
-   - Go to https://console.cloud.google.com/
-   - Create project → Enable Gmail API
-   - Create OAuth 2.0 credentials (Client ID & Secret)
-
-3. **Configure n8n:**
-   - Add Gmail OAuth2 credential with Client ID/Secret
-   - Import `form_automation/n8n_workflow.json`
-   - Update Execute Command node with your Python path
-   - Configure Gmail nodes with your credential
-
-4. **Test workflow:**
-   - Execute workflow in n8n
-   - Verify form submission
-
-For detailed n8n setup, see `form_automation/README.md`
+**Step 7: Test**
+1. Send yourself an email with a Google Form link
+2. n8n should detect it and run the script automatically
+3. Check n8n execution logs to verify
 
 ---
 
