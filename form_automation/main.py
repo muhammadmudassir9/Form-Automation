@@ -192,6 +192,23 @@ def load_form(page: Page) -> bool:
         page.goto(Config.FORM_URL, timeout=Config.TIMEOUT_FORM_LOAD)
         page.wait_for_load_state('networkidle')
         
+        # Fix UI layout issues for Google sign-in pages
+        page.add_style_tag(content="""
+            @media (min-width: 450px) {
+                .zHKAbc, .Xb9hP, .x3xXGc {
+                    flex-direction: row !important;
+                    display: flex !important;
+                    align-items: center !important;
+                }
+                .yKBrKe, .dGrefb {
+                    flex-shrink: 0 !important;
+                }
+            }
+            body {
+                overflow-x: hidden !important;
+            }
+        """)
+        
         # Authentication handling
         if "accounts.google.com" in page.url or "signin" in page.url:
             logger.info("Authentication required - awaiting user login")
@@ -604,10 +621,51 @@ def main() -> None:
             context = playwright.chromium.launch_persistent_context(
                 user_data_dir=str(Config.BROWSER_DATA_DIR),
                 headless=False,
-                args=['--no-sandbox', '--disable-dev-shm-usage']
+                args=[
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-site-isolation-trials',
+                    '--start-maximized',
+                    '--window-size=1920,1080'
+                ],
+                ignore_https_errors=True,
+                viewport=None,  # Use actual window size instead of fixed viewport
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                locale='en-US',
+                timezone_id='America/New_York'
             )
             
             page = context.new_page()
+            
+            # Hide automation indicators (execute before navigation)
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+                
+                // Remove automation flags
+                delete navigator.__proto__.webdriver;
+                
+                // Override plugins to look like a real browser
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+                
+                // Override languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en']
+                });
+                
+                // Override permissions
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+            """)
             
             # Automation workflow
             if load_form(page):
