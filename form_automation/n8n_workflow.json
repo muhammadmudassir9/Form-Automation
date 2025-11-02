@@ -1,0 +1,290 @@
+{
+    "name": "My workflow",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 18 15-31 * *"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -496,
+          80
+        ],
+        "id": "08077ef7-681f-4008-ba42-be29283e9000",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "2d08de85-f0c7-446c-a267-77855ccc3199",
+                "leftValue": "={{ $json.headers.subject }}",
+                "rightValue": "Commute Reimbursement Form",
+                "operator": {
+                  "type": "string",
+                  "operation": "contains"
+                }
+              }
+            ],
+            "combinator": "or"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          112,
+          80
+        ],
+        "id": "e6526e51-60da-4bad-a9be-20ac0b00c5e8",
+        "name": "If"
+      },
+      {
+        "parameters": {
+          "command": "=cd /home/muhammad.mudassar/Desktop/automation/form_automation && python3 main.py --url=\"{{ $json.url }}\""
+        },
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [
+          560,
+          64
+        ],
+        "id": "2dbf7414-7e24-422e-aeed-e36297a18bc9",
+        "name": "Execute Command"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "325f1521-221f-4728-9f52-36b0ad1f1fe0",
+                "leftValue": "={{ $json.stderr }}",
+                "rightValue": "COMPLETED SUCCESSFULLY",
+                "operator": {
+                  "type": "string",
+                  "operation": "contains"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          768,
+          64
+        ],
+        "id": "8c990d1e-d3f6-44e9-b548-573c0c8ce81b",
+        "name": "If1"
+      },
+      {
+        "parameters": {
+          "sendTo": "={{ $('If').item.json.headers['delivered-to'] }}",
+          "subject": "Form Automation Failed",
+          "message": "=Please complete the form manually.\nURL: {{ $('Code in JavaScript1').item.json.url }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.1,
+        "position": [
+          1024,
+          176
+        ],
+        "id": "76da6668-a9d0-4ccb-ae63-2e02493fa168",
+        "name": "Send a message",
+        "webhookId": "ee5ed9d8-e186-412a-b5a7-6e0687c59eab",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "JRXpnZwc6nHUFnGa",
+            "name": "Gmail account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Extract URLs from HTML body\nconst html = $input.first().json.html || \"\";\nconst regex = /(https?:\\/\\/[^\\s\"'>]+)/g;\nconst matches = html.match(regex);\n\n// Pick first URL (or refine if you know it's a Google Form)\nconst formUrl = matches?.find(u => u.includes(\"forms.gle\") || u.includes(\"google.com/forms\")) || null;\n\nreturn [{ url: formUrl }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          384,
+          64
+        ],
+        "id": "94a1ad8a-92b6-4a79-9a42-096fd657d84f",
+        "name": "Code in JavaScript1"
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "limit": 10,
+          "simple": false,
+          "filters": {
+            "readStatus": "unread"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.1,
+        "position": [
+          -48,
+          80
+        ],
+        "id": "18ff0390-c530-41f8-b713-384b9734fb07",
+        "name": "Get many messages",
+        "webhookId": "e1bf00fa-90f5-4500-8b74-398945c59cc0",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "JRXpnZwc6nHUFnGa",
+            "name": "Gmail account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "markAsRead",
+          "messageId": "={{ $('If').item.json.id }}"
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.1,
+        "position": [
+          1280,
+          48
+        ],
+        "id": "58c6ca3b-2b9f-4e49-addc-8c2de5f4dfa3",
+        "name": "Mark a message as read",
+        "webhookId": "653ec3ef-cac6-4ce0-8e94-db1bd8d9e287",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "JRXpnZwc6nHUFnGa",
+            "name": "Gmail account"
+          }
+        }
+      }
+    ],
+    "pinData": {},
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Get many messages",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Execute Command": {
+        "main": [
+          [
+            {
+              "node": "If1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If1": {
+        "main": [
+          [
+            {
+              "node": "Mark a message as read",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Send a message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript1": {
+        "main": [
+          [
+            {
+              "node": "Execute Command",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get many messages": {
+        "main": [
+          [
+            {
+              "node": "If",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send a message": {
+        "main": [
+          [
+            {
+              "node": "Mark a message as read",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Mark a message as read": {
+        "main": [
+          []
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "versionId": "38d845d0-2e63-467f-b079-fd6c26777871",
+    "meta": {
+      "templateCredsSetupCompleted": true,
+      "instanceId": "38f8d027ebee26d1b2f31367a3ef935f95f3b1a0e01d4911d27ca55fbf2db5a0"
+    },
+    "id": "QEwmEHns33GzbtTU",
+    "tags": []
+  }
